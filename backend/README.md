@@ -15,17 +15,18 @@ python manage.py runserver
 
 The API is served at `http://127.0.0.1:8000/`.
 
-## Registration endpoint
+## Auth endpoints
 
-`POST /api/auth/register/`
+### Registration
+
+`POST /api/registration/`
 
 ```json
 {
-  "username": "alice",
+  "fullname": "Alice Doe",
   "email": "alice@example.com",
   "password": "Sup3rSecret!",
-  "first_name": "Alice",
-  "last_name": "Doe"
+  "repeated_password": "Sup3rSecret!"
 }
 ```
 
@@ -33,15 +34,28 @@ Successful requests return the created user plus an auth token:
 
 ```json
 {
-  "user": {
-    "id": 1,
-    "username": "alice",
-    "email": "alice@example.com",
-    "first_name": "Alice",
-    "last_name": "Doe"
-  },
-  "token": "0123456789abcdef..."
+  "token": "0123456789abcdef...",
+  "user_id": 1,
+  "email": "alice@example.com",
+  "fullname": "Alice Doe"
 }
 ```
 
+### Login
+
+`POST /api/login/`
+
+```json
+{
+  "email": "alice@example.com",
+  "password": "Sup3rSecret!"
+}
+```
+
+Response matches the registration payload (token, user_id, email, fullname).
+
 The token can be provided in subsequent requests using an `Authorization: Token <token>` header. All future Kanban board/task endpoints will require an authenticated user.
+
+## CORS
+
+Local frontend servers such as VS Code Live Server (port 5500) are already allowed through `CORS_ALLOWED_ORIGINS` in `settings.py`. Add more origins there if you serve the frontend from another port/domain.

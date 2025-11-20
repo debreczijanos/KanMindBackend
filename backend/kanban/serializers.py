@@ -6,12 +6,6 @@ from .models import Board, Task
 User = get_user_model()
 
 
-class UserSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = ("id", "username", "email", "first_name", "last_name")
-
-
 class RegistrationSerializer(serializers.Serializer):
     fullname = serializers.CharField(max_length=255)
     email = serializers.EmailField()
@@ -61,41 +55,105 @@ class LoginSerializer(serializers.Serializer):
         return attrs
 
 
-class TaskSerializer(serializers.ModelSerializer):
-    assignees = UserSerializer(many=True, read_only=True)
+def _get_fullname(user: User) -> str:
+    full_name = user.get_full_name().strip()
+    return full_name or user.username
+
+
+class BoardMemberSerializer(serializers.ModelSerializer):
+    fullname = serializers.SerializerMethodField()
 
     class Meta:
-        model = Task
-        fields = (
-            "id",
-            "title",
-            "description",
-            "priority",
-            "status",
-            "assignees",
-            "due_date",
-            "created_at",
-            "updated_at",
-            "board",
-        )
-        read_only_fields = ("created_at", "updated_at")
+        model = User
+        fields = ("id", "email", "fullname")
+
+    def get_fullname(self, obj):
+        return _get_fullname(obj)
 
 
-class BoardSerializer(serializers.ModelSerializer):
-    owner = UserSerializer(read_only=True)
-    members = UserSerializer(many=True, read_only=True)
-    tasks = TaskSerializer(many=True, read_only=True)
+class BoardListSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source="name")
+    owner_id = serializers.IntegerField(read_only=True)
+    member_count = serializers.SerializerMethodField()
+    ticket_count = serializers.SerializerMethodField()
+    tasks_to_do_count = serializers.SerializerMethodField()
+    tasks_high_prio_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Board
         fields = (
             "id",
-            "name",
+            "title",
+            "owner_id",
+            "member_count",
+            "ticket_count",
+            "tasks_to_do_count",
+            "tasks_high_prio_count",
+        )
+
+    def get_member_count(self, obj):
+        return obj.members.count()
+
+    def get_ticket_count(self, obj):
+        return obj.tasks.count()
+
+    def get_tasks_to_do_count(self, obj):
+        return obj.tasks.filter(status=Task.Status.TODO).count()
+
+    def get_tasks_high_prio_count(self, obj):
+        return obj.tasks.filter(
+            priority__in=[Task.Priority.HIGH, Task.Priority.CRITICAL]
+        ).count()
+
+
+class BoardDetailSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source="name")
+    owner_id = serializers.IntegerField(read_only=True)
+    members = BoardMemberSerializer(many=True, read_only=True)
+    tasks = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Board
+        fields = (
+            "id",
+            "title",
             "description",
-            "owner",
+            "owner_id",
             "members",
             "tasks",
             "created_at",
             "updated_at",
         )
         read_only_fields = ("created_at", "updated_at")
+
+    def get_tasks(self, obj):
+        return []
+
+
+class BoardWriteSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(source="name", max_length=255)
+    members = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        many=True,
+        required=False,
+    )
+
+    class Meta:
+        model = Board
+        fields = ("id", "title", "description", "members")
+
+    def create(self, validated_data):
+        members = validated_data.pop("members", [])
+        board = Board.objects.create(**validated_data)
+        if members:
+            board.members.set(members)
+        return board
+
+    def update(self, instance, validated_data):
+        members = validated_data.pop("members", None)
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        if members is not None:
+            instance.members.set(members)
+        return instance

@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate, get_user_model
 from rest_framework import serializers
 
-from .models import Board, Task
+from .models import Board, Comment, Task
 
 User = get_user_model()
 
@@ -71,6 +71,79 @@ class BoardMemberSerializer(serializers.ModelSerializer):
         return _get_fullname(obj)
 
 
+class TaskDetailSerializer(serializers.ModelSerializer):
+    assignee = BoardMemberSerializer(read_only=True)
+    reviewer = BoardMemberSerializer(read_only=True)
+    board = serializers.IntegerField(source="board_id", read_only=True)
+
+    class Meta:
+        model = Task
+        fields = (
+            "id",
+            "board",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "due_date",
+            "assignee",
+            "reviewer",
+        )
+
+
+class TaskListSerializer(TaskDetailSerializer):
+    comments_count = serializers.SerializerMethodField()
+
+    class Meta(TaskDetailSerializer.Meta):
+        fields = TaskDetailSerializer.Meta.fields + ("comments_count",)
+
+    def get_comments_count(self, obj):
+        if hasattr(obj, "comments_count"):
+            return obj.comments_count
+        return obj.comments.count()
+
+
+class TaskWriteSerializer(serializers.ModelSerializer):
+    assignee_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        allow_null=True,
+        required=False,
+        source="assignee",
+    )
+    reviewer_id = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.all(),
+        allow_null=True,
+        required=False,
+        source="reviewer",
+    )
+
+    class Meta:
+        model = Task
+        fields = (
+            "id",
+            "board",
+            "title",
+            "description",
+            "status",
+            "priority",
+            "due_date",
+            "assignee_id",
+            "reviewer_id",
+        )
+
+
+class TaskCommentSerializer(serializers.ModelSerializer):
+    author = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Comment
+        fields = ("id", "content", "author", "created_at")
+        read_only_fields = ("id", "author", "created_at")
+
+    def get_author(self, obj):
+        return _get_fullname(obj.author)
+
+
 class BoardListSerializer(serializers.ModelSerializer):
     title = serializers.CharField(source="name")
     owner_id = serializers.IntegerField(read_only=True)
@@ -127,7 +200,10 @@ class BoardDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ("created_at", "updated_at")
 
     def get_tasks(self, obj):
-        return []
+        tasks = obj.tasks.select_related("assignee", "reviewer").all()
+        return TaskDetailSerializer(
+            tasks, many=True, context=self.context
+        ).data
 
 
 class BoardWriteSerializer(serializers.ModelSerializer):

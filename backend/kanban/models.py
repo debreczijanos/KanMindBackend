@@ -35,8 +35,9 @@ class Task(models.Model):
         CRITICAL = "critical", "Critical"
 
     class Status(models.TextChoices):
-        TODO = "todo", "To Do"
-        IN_PROGRESS = "in_progress", "In Progress"
+        TODO = "to-do", "To Do"
+        IN_PROGRESS = "in-progress", "In Progress"
+        REVIEW = "review", "Review"
         DONE = "done", "Done"
 
     board = models.ForeignKey(
@@ -56,9 +57,18 @@ class Task(models.Model):
         choices=Status.choices,
         default=Status.TODO,
     )
-    assignees = models.ManyToManyField(
+    assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
-        related_name="tasks",
+        related_name="assigned_tasks",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+    )
+    reviewer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="review_tasks",
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
     )
     due_date = models.DateField(blank=True, null=True)
@@ -70,3 +80,24 @@ class Task(models.Model):
 
     def __str__(self) -> str:
         return f"{self.title} ({self.board.name})"
+
+
+class Comment(models.Model):
+    task = models.ForeignKey(
+        Task,
+        related_name="comments",
+        on_delete=models.CASCADE,
+    )
+    author = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        related_name="comments",
+        on_delete=models.CASCADE,
+    )
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("created_at",)
+
+    def __str__(self) -> str:
+        return f"Comment by {self.author} on {self.task}"

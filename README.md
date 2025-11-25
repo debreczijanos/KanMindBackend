@@ -1,112 +1,102 @@
 # KanMind Backend
 
-Python/Django backend that powers the Kanban board frontend. It exposes a REST API for authentication and will be extended with board/task management endpoints.
+Lightweight Django REST API für Authentifizierung, Boards, Tasks und Kommentare – gebaut für das KanMind-Frontend.
 
-## Quick start
+## Overview
+- Token-basierte Auth (Registration + Login).
+- Board-Management mit Member-Verwaltung (Owner-gated Updates/Deletes).
+- Tasks inkl. Assignee/Reviewer, Status, Priorität, Due Date und Kommentar-Thread.
+- Fertige JSON-Responses, die das Frontend erwartet (Counters, comments_count).
 
+## Tech Stack
+- Python 3.12, Django 5, Django REST Framework, TokenAuth
+- SQLite (dev), CORS Middleware
+
+## Project Structure
+```
+core/               # settings.py, urls.py, wsgi.py, asgi.py
+auth_app/           # Auth endpoints (login, registration, email-check)
+boards_app/         # Boards + permissions + serializers
+tasks_app/          # Tasks, comments, permissions
+manage.py
+requirements.txt
+```
+
+## Installation
+Prerequisites: Python 3.12+
+
+**Mac/Linux**
 ```bash
-cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
+python manage.py createsuperuser   # optional
 python manage.py runserver
 ```
 
-The API is served at `http://127.0.0.1:8000/`.
-
-## Auth endpoints
-
-### Registration
-
-`POST /api/registration/`
-
-```json
-{
-  "fullname": "Alice Doe",
-  "email": "alice@example.com",
-  "password": "Sup3rSecret!",
-  "repeated_password": "Sup3rSecret!"
-}
+**Windows (PowerShell)**
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py createsuperuser   # optional
+python manage.py runserver
 ```
 
-Successful requests return the created user plus an auth token:
+API-Base: `http://127.0.0.1:8000/api/`
 
-```json
-{
-  "token": "0123456789abcdef...",
-  "user_id": 1,
-  "email": "alice@example.com",
-  "fullname": "Alice Doe"
-}
-```
+## API Endpoints (kurz)
 
-### Login
+### Auth (`/api/auth/`)
+- `POST /registration/`
+  ```json
+  {"fullname":"Alice Doe","email":"alice@example.com","password":"Sup3rSecret!","repeated_password":"Sup3rSecret!"}
+  ```
+  Response: `token`, `user_id`, `email`, `fullname`
 
-`POST /api/login/`
+- `POST /login/`
+  ```json
+  {"email":"alice@example.com","password":"Sup3rSecret!"}
+  ```
+  Response: wie Registration
 
-```json
-{
-  "email": "alice@example.com",
-  "password": "Sup3rSecret!"
-}
-```
+- `GET /email-check/?email=user@example.com` (Token nötig)
+  - 404 wenn Nutzer nicht existiert, sonst `{id,email,fullname}`
 
-Response matches the registration payload (token, user_id, email, fullname).
+### Boards (`/api/boards/`) – Token nötig
+- `GET /` – Boards des Users (owner oder member) inkl. Counters.
+- `POST /`
+  ```json
+  {"title":"My Board","description":"Optional","members":[2,3]}
+  ```
+- `GET /<id>/` – Board + Members + Tasks (inkl. assignee/reviewer + comments_count).
+- `PATCH /<id>/` – nur Owner. Vollständige Memberliste senden wenn geändert.
+- `DELETE /<id>/` – nur Owner.
 
-The token can be provided in subsequent requests using an `Authorization: Token <token>` header. All future Kanban board/task endpoints will require an authenticated user.
+### Tasks (`/api/tasks/`) – Token nötig
+- `POST /`
+  ```json
+  {"board":1,"title":"Demo","description":"","status":"to-do","priority":"medium","assignee_id":null,"reviewer_id":null,"due_date":"2025-11-30"}
+  ```
+  Hinweis: assignee/reviewer müssen Board-Member sein (oder null).
 
-## Board endpoints
+- `PATCH /<id>/` – Felder nach Bedarf; Board kann nicht gewechselt werden.
+- `DELETE /<id>/`
+- `GET /assigned-to-me/` – Tasks, bei denen der User Assignee ist.
+- `GET /reviewing/` – Tasks, bei denen der User Reviewer ist.
 
-- `GET /api/boards/` – list boards where the authenticated user is the owner or a member. Each item exposes `id`, `title`, `owner_id`, and the task/member counters that the dashboard expects.
-- `POST /api/boards/` – create a board. Payload:
+### Task Comments (`/api/tasks/<task_id>/comments/`) – Token nötig
+- `GET /` – Liste der Comments.
+- `POST /`
+  ```json
+  {"content":"Nice update"}
+  ```
+- `DELETE /<comment_id>/` – Autor oder Board-Owner.
 
-```json
-{
-  "title": "My New Board",
-  "description": "Optional text",
-  "members": [2, 3]
-}
-```
-
-The authenticated user automatically becomes the owner and is added as a member. The response returns the full board detail (members list, timestamps, etc.).
-
-- `GET /api/boards/<id>` – board detail used by the board and settings screens (includes members and the board’s tasks with assignee/reviewer info).
-- `PATCH /api/boards/<id>/` – owners can rename the board or update the member list. Always send the full member list when changing members.
-- `DELETE /api/boards/<id>/` – owners only.
-- `GET /api/email-check/?email=<address>` – validate that another user exists before inviting them to a board. Returns `{ "id", "email", "fullname" }` on success or `404` if the email is unknown.
-
-## Task endpoints
-
-- `POST /api/tasks/` – create a task. Payload mirrors the frontend form:
-
-```json
-{
-  "board": 1,
-  "title": "Wireframe UI",
-  "description": "Collect feedback",
-  "status": "to-do",
-  "priority": "medium",
-  "due_date": "2025-11-30",
-  "assignee_id": 2,
-  "reviewer_id": 3
-}
-```
-
-`assignee_id` / `reviewer_id` are optional and must reference board members.
-
-- `PATCH /api/tasks/<id>/` – update a task (status moves, edits, etc.). Send the fields you want to change; the board cannot be changed.
-- `DELETE /api/tasks/<id>/` – delete a task.
-- `GET /api/boards/<id>/` already returns the board with its tasks, including nested assignee/reviewer info that the board page renders.
-- `GET /api/tasks/assigned-to-me/` – dashboard list of tasks where the current user is the assignee. Includes `comments_count`, `board`, and `due_date`.
-- `GET /api/tasks/reviewing/` – tasks where the current user is the reviewer.
-
-### Task comments
-
-- `GET /api/tasks/<task_id>/comments/` – list comments for a task.
-- `POST /api/tasks/<task_id>/comments/` – add a comment with `{ "content": "Nice update" }`. Author + timestamp are filled automatically.
-- `DELETE /api/tasks/<task_id>/comments/<comment_id>/` – comment author or the board owner can delete comments.
+## Authentifizierung
+Alle geschützten Endpoints erwarten `Authorization: Token <token>`.
 
 ## CORS
-
-Local frontend servers such as VS Code Live Server (port 5500) are already allowed through `CORS_ALLOWED_ORIGINS` in `settings.py`. Add more origins there if you serve the frontend from another port/domain.
+Erlaubte Origins (dev): `http://127.0.0.1:5500`, `http://localhost:5500`, `http://127.0.0.1:5173`, `http://localhost:5173`. Bei Bedarf `CORS_ALLOWED_ORIGINS` in `core/settings.py` erweitern.

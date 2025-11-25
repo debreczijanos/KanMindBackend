@@ -1,6 +1,7 @@
 from django.apps import AppConfig
 
 
-class KanbanConfig(AppConfig):
+class TasksConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'kanban'
+    name = 'tasks_app'
+    label = 'tasks'

@@ -1,7 +1,7 @@
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions, status, viewsets
-from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from boards_app.models import Board
@@ -85,6 +85,9 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Return a detailed payload after task creation."""
+        board_id = request.data.get("board")
+        if board_id is not None and not Board.objects.filter(id=board_id).exists():
+            raise NotFound({"board": "Board not found."})
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         self.perform_create(serializer)

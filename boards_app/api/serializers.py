@@ -51,7 +51,9 @@ class BoardDetailSerializer(serializers.ModelSerializer):
     """Full board detail including members and nested tasks."""
     title = serializers.CharField(source="name")
     owner_id = serializers.IntegerField(read_only=True)
+    owner_data = UserLookupSerializer(source="owner", read_only=True)
     members = UserLookupSerializer(many=True, read_only=True)
+    members_data = UserLookupSerializer(source="members", many=True, read_only=True)
     tasks = serializers.SerializerMethodField()
     member_count = serializers.SerializerMethodField()
     ticket_count = serializers.SerializerMethodField()
@@ -65,11 +67,13 @@ class BoardDetailSerializer(serializers.ModelSerializer):
             "title",
             "description",
             "owner_id",
+            "owner_data",
             "member_count",
             "ticket_count",
             "tasks_to_do_count",
             "tasks_high_prio_count",
             "members",
+            "members_data",
             "tasks",
             "created_at",
             "updated_at",
@@ -124,3 +128,15 @@ class BoardWriteSerializer(serializers.ModelSerializer):
         if members is not None:
             instance.members.set(members)
         return instance
+
+
+class BoardMembershipSerializer(serializers.ModelSerializer):
+    """Minimal payload focused on owner and members after updates."""
+
+    title = serializers.CharField(source="name")
+    owner_data = UserLookupSerializer(source="owner", read_only=True)
+    members_data = UserLookupSerializer(source="members", many=True, read_only=True)
+
+    class Meta:
+        model = Board
+        fields = ("id", "title", "owner_data", "members_data")

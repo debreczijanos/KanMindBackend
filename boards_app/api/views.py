@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from boards_app.models import Board
 from tasks_app.models import Task
 from .permissions import IsBoardMemberOrOwner
-from .serializers import BoardDetailSerializer, BoardListSerializer, BoardWriteSerializer
+from .serializers import BoardDetailSerializer, BoardListSerializer, BoardMembershipSerializer, BoardWriteSerializer
 
 
 class BoardViewSet(viewsets.ModelViewSet):
@@ -56,10 +56,11 @@ class BoardViewSet(viewsets.ModelViewSet):
         return Response(output_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
 
     def perform_update(self, serializer):
-        """Allow updates only from the owner and keep owner in members."""
+        """Allow updates from owner or members and keep owner in members."""
         board = serializer.instance
-        if board.owner_id != self.request.user.id:
-            raise PermissionDenied({"errors": ["Only the board owner can update this board."]})
+        user = self.request.user
+        if board.owner_id != user.id and not board.members.filter(id=user.id).exists():
+            raise PermissionDenied({"errors": ["Only board members or the owner can update this board."]})
         updated_board = serializer.save()
         updated_board.members.add(updated_board.owner)
         return updated_board
@@ -84,7 +85,7 @@ class BoardViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(instance, data=request.data, partial=partial)
         serializer.is_valid(raise_exception=True)
         updated_board = self.perform_update(serializer)
-        output = BoardDetailSerializer(updated_board, context=self.get_serializer_context())
+        output = BoardMembershipSerializer(updated_board, context=self.get_serializer_context())
         return Response(output.data)
 
     def partial_update(self, request, *args, **kwargs):

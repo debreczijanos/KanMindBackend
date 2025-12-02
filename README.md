@@ -49,7 +49,7 @@ API-Base: `http://127.0.0.1:8000/api/`
 
 ## API Endpoints (kurz)
 
-### Auth (`/api/auth/`)
+### Auth (`/api/`)
 - `POST /registration/`
   ```json
   {"fullname":"Alice Doe","email":"alice@example.com","password":"Sup3rSecret!","repeated_password":"Sup3rSecret!"}
